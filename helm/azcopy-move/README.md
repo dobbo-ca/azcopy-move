@@ -334,8 +334,9 @@ NOTES output does this for you.
 | `cleanup.enabled` | `false` | `false` copies and writes the delete report but deletes nothing |
 | `cleanup.trustJobRecordOnly` | `false` | `true` skips the destination check and deletes on the job record alone |
 | `cleanup.reconcile` | `true` | also deletes any source object already present at the destination with a matching byte count, not only this run's job output; keep this on |
-| `azcopy.concurrencyValue` | `"400"` | bounded by the storage account, not the pod; raise in steps and watch for `503`/`ServerBusy` |
 | `azcopy.logLevel` | `ERROR` | successes are read from the job record, not the log |
+| `azcopy.concurrencyValue` | `""` | HTTP connections; empty lets azcopy size it from logical cores |
+| `azcopy.concurrentFiles` | `""` | files in flight at once; empty lets azcopy decide |
 | `azcopy.progressIntervalSeconds` | `30` | seconds between progress lines in the pod log; `0` prints every update |
 | `azcopy.overwrite` | `ifSourceNewer` | |
 | `azcopy.extraArgs` | `[]` | |
@@ -396,3 +397,46 @@ affect the delete-verification chain.
 and `delete-report.csv` are destroyed when the pod terminates. The pod log
 survives; the emptyDir does not. If you need the full record, copy it out while
 the pod is still running.
+
+## Throttling, and why the concurrency default is empty
+
+A server-to-server copy is bounded by the storage account, not the pod. The two
+services do not have the same ceiling: **an Azure Files destination throttles
+far earlier than Blob.** A standard file share is around 1,000 IOPS, and azcopy
+writes a large file as a stream of 4 MB `PUT ?comp=range` calls, so a high
+connection count becomes a flood of range writes against a single share.
+
+Measured on a real migration — 845 files averaging about 1.7 GB, from a blob
+container to a file share on the same account, with `concurrencyValue: 400`:
+
+| | |
+|---|---|
+| 503 `ServerBusy` from the **file** destination | 202,725 |
+| 503 `ServerBusy` from the **blob** source | 0 |
+| deepest retry observed | 6 attempts |
+| transfers failed | 0 |
+
+The copy still finished, because azcopy's retries eventually win. That is the
+trap: throttling this severe is invisible in the outcome and shows up only as
+wasted requests, a log full of 503s, and load on an account that is usually
+also serving live traffic.
+
+So `concurrencyValue` defaults to empty, which leaves the decision to azcopy
+based on the pod's logical cores. Raise it deliberately, in steps, watching the
+pod log for `ServerBusy`. For a Files destination treat something like 64 as a
+ceiling rather than a starting point.
+
+`concurrentFiles` is the other lever. It bounds how many *files* are in flight
+rather than how many connections exist, which with large files is often the
+more effective control: it limits concurrent range writes per share without
+starving any single transfer.
+
+Counting throttles in a finished run:
+
+```bash
+kubectl -n <ns> logs job/<job> | grep -c ServerBusy
+```
+
+Note that `azcopy.logLevel` defaults to `ERROR`, so the azcopy log file records
+only failed requests. You cannot compute a 503 *rate* from it — successes are
+never written.
