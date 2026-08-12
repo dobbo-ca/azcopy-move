@@ -128,17 +128,26 @@ jobs:
           tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
           rc=0
           for f in helm/azcopy-move/ci/*-values.yaml; do
-            echo "--- $(basename "$f")"
-            helm template t helm/azcopy-move -f "$f" \
-              --set image.tag=0.0.0-pr > "/tmp/$(basename "$f").rendered"
+            name="$(basename "$f" -values.yaml)"
+            echo "--- $name"
+            # The .yaml extension is load-bearing: kubeconform skips files it
+            # does not recognise and still exits 0, reporting "0 resource found
+            # in 0 file". A guard that silently validates nothing is worse than
+            # no guard, so assert it actually found resources.
+            out="/tmp/rendered-$name.yaml"
+            helm template t helm/azcopy-move -f "$f" --set image.tag=0.0.0-pr > "$out"
 
             # Every document must begin with apiVersion, before any schema check.
             awk '/^---/{d=1;next} d&&NF&&$0!~/^#/{if($0 !~ /^apiVersion:/){
                    print "  INVALID: document starts with: " $0; bad=1} d=0}
-                 END{exit bad?1:0}' "/tmp/$(basename "$f").rendered" || rc=1
+                 END{exit bad?1:0}' "$out" || rc=1
 
-            /tmp/kubeconform -strict -summary -ignore-missing-schemas \
-              "/tmp/$(basename "$f").rendered" || rc=1
+            summary="$(/tmp/kubeconform -strict -summary -ignore-missing-schemas "$out")" || rc=1
+            echo "$summary"
+            case "$summary" in
+              *"0 resource found"*)
+                echo "  ERROR: kubeconform validated nothing in $out" >&2; rc=1 ;;
+            esac
           done
           exit $rc
 
