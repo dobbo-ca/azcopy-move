@@ -1,0 +1,4 @@
+a/one.czi
+odd/name, with comma.czi
+quote"inside.czi
+kept.czi

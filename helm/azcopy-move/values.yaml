@@ -189,3 +189,36 @@ workDir:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# ---------------------------------------------------------------------------
+# Ad-hoc delete
+# ---------------------------------------------------------------------------
+# A one-shot Job that deletes source objects named in a ConfigMap, for the case
+# where a copy ran with cleanup disabled: the objects arrived, nothing removed
+# them, and the azcopy job plan that recorded the transfer died with the pod's
+# emptyDir. Feed it that run's delete-list.txt (or delete-report.csv) instead.
+#
+# It runs the same remove-migrated.sh as the schedule. The list supplies
+# CANDIDATES, not decisions -- every path is still checked against a live
+# destination listing and a byte comparison before anything is removed, so a
+# stale or wrong list cannot delete an object that is not provably at the
+# destination.
+adhocDelete:
+  enabled: false
+
+  # SAFE DEFAULT, and deliberately separate from cleanup.enabled: arming the
+  # schedule's deletion must not silently arm a one-shot bulk delete. false
+  # reports and runs azcopy rm --dry-run.
+  cleanupEnabled: false
+
+  # ConfigMap holding the list. Create it out of band from the captured file:
+  #
+  #   kubectl create configmap azcopy-move-reap -n <ns> \
+  #     --from-file=delete-list.txt=./delete-list.txt
+  #
+  # A ConfigMap caps at 1 MiB, which is roughly 20,000 paths. Split the list if
+  # it is larger.
+  listConfigMap: ""
+  listKey: delete-list.txt
+
+  activeDeadlineSeconds: 14400
