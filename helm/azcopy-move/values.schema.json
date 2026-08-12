@@ -32,6 +32,20 @@
           "type": "integer",
           "minimum": 0,
           "description": "Seconds between azcopy progress lines in the pod log. 0 prints every update."
+        },
+        "concurrencyValue": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "HTTP connections azcopy uses. Empty lets azcopy size it from logical cores. Accepts 64 or \"64\"."
+        },
+        "concurrentFiles": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "Files transferred at once. Empty lets azcopy decide. Accepts 8 or \"8\"."
         }
       }
     }

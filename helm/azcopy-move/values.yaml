@@ -82,10 +82,32 @@ cleanup:
 # azcopy tuning
 # ---------------------------------------------------------------------------
 azcopy:
-  # Server-to-server copy, so this is bounded by the storage account, not the
-  # pod. The account is shared with live traffic. Raise in steps and watch for
-  # 503 ServerBusy.
-  concurrencyValue: "400"
+  # How many HTTP connections azcopy uses. EMPTY (the default) leaves it to
+  # azcopy, which sizes it from the pod's logical cores.
+  #
+  # This is a server-to-server copy, so the ceiling is the storage account, not
+  # the pod -- and an Azure FILES destination throttles far earlier than Blob.
+  # A standard file share is around 1,000 IOPS, and every large file is written
+  # as a stream of 4 MB "PUT ?comp=range" calls, so a high value here becomes a
+  # flood of range writes against one share.
+  #
+  # Measured, moving 845 files (~1.7 GB each) from a blob container to a file
+  # share on one account: concurrencyValue 400 produced 202,725 HTTP 503
+  # ServerBusy responses, every one of them from the FILE destination and none
+  # from the blob source. Retries reached six attempts deep. The copy still
+  # completed with zero failures, but it wasted enormous effort and hammered an
+  # account that was also serving live traffic.
+  #
+  # Start empty. If throughput is genuinely limited, raise in steps and watch
+  # the pod log for 503 ServerBusy. For a Files destination, treat something
+  # like 64 as a ceiling rather than a starting point.
+  concurrencyValue: ""
+
+  # How many FILES azcopy transfers at once, as opposed to how many connections
+  # it opens. Empty leaves it to azcopy. With large files this is often the more
+  # effective lever, because it bounds concurrent range writes per share without
+  # starving a single transfer of connections.
+  concurrentFiles: ""
   logLevel: ERROR
   overwrite: ifSourceNewer
   trailingDot: Enable

@@ -98,8 +98,17 @@ spec:
                 - name: AZCOPY_EXTRA_ARGS
                   value: {{ join " " . | quote }}
                 {{- end }}
+                {{- with .Values.azcopy.concurrencyValue }}
+                # Omitted when empty. azcopy reads an empty AZCOPY_CONCURRENCY_VALUE
+                # as an override attempt rather than "unset", so the variable must
+                # be absent, not blank, to get its core-derived default.
                 - name: AZCOPY_CONCURRENCY_VALUE
-                  value: {{ .Values.azcopy.concurrencyValue | quote }}
+                  value: {{ . | quote }}
+                {{- end }}
+                {{- with .Values.azcopy.concurrentFiles }}
+                - name: AZCOPY_CONCURRENT_FILES
+                  value: {{ . | quote }}
+                {{- end }}
                 # Keep every writable path on the emptyDir, because the root
                 # filesystem is read only.
                 - name: AZCOPY_JOB_PLAN_LOCATION
