@@ -69,14 +69,24 @@ image semver in at chart package time.
 {{- end -}}
 {{- end -}}
 
-{{/* Fail early on the settings that would otherwise fail at runtime. */}}
+{{/*
+Fail early on the settings that would otherwise fail at runtime.
+
+Every `required` here MUST be assigned to a throwaway variable. `required`
+RETURNS the value it checked, so a bare `{{ required ... }}` prints it into
+whatever template included this one — the values land in front of the first
+`apiVersion:` and the manifest becomes invalid. `helm lint` and `helm template`
+both accept the result; only a real `helm install` rejects it, with the
+unhelpful "error validating data: apiVersion not set". `fail` returns nothing
+and is safe bare.
+*/}}
 {{- define "azcopy-move.validate" -}}
-{{- required "image.repository is required. Build ./containers/azcopy and push it." .Values.image.repository -}}
+{{- $_ := required "image.repository is required. Build ./containers/azcopy and push it." .Values.image.repository -}}
 {{- if not .Values.image.tag -}}
-{{- fail "image.tag is empty. Install the packaged chart from oci://ghcr.io/dobbo-ca/azcopy-move, or set image.tag explicitly. An empty tag renders a bare repository, which resolves to :latest." -}}
+{{- fail "image.tag is empty. Install the packaged chart from oci://ghcr.io/dobbo-ca/charts/azcopy-move, or set image.tag explicitly. An empty tag renders a bare repository, which resolves to :latest." -}}
 {{- end -}}
-{{- required "move.source.container is required" .Values.move.source.container -}}
-{{- required "move.dest.container is required" .Values.move.dest.container -}}
+{{- $_ := required "move.source.container is required" .Values.move.source.container -}}
+{{- $_ := required "move.dest.container is required" .Values.move.dest.container -}}
 {{- if and (not .Values.move.source.endpoint) (not .Values.move.source.storageAccount) -}}
 {{- fail "move.source.storageAccount is required when move.source.endpoint is empty" -}}
 {{- end -}}
