@@ -30,6 +30,16 @@ metadata:
     # stable so a stale one is noticed rather than silently accumulating.
     "helm.sh/resource-policy": keep
 spec:
+  # DELIBERATELY no ttlSecondsAfterFinished, unlike the CronJob's Jobs.
+  #
+  # This Job is rendered for as long as adhocDelete.enabled is true. If the TTL
+  # controller deleted it while that is still set, the next `helm upgrade`
+  # would find it missing from the cluster but present in the manifest and
+  # recreate it -- re-running a bulk delete with nobody watching.
+  #
+  # Its lifecycle is manual on purpose: run it, read it, then remove the Job and
+  # its ConfigMap together. It is also the only record of what a bulk delete
+  # did, which is not something to expire on a timer.
   backoffLimit: 0
   activeDeadlineSeconds: {{ .Values.adhocDelete.activeDeadlineSeconds }}
   template:

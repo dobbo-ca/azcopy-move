@@ -495,5 +495,45 @@ Notes:
   the Job first. The name is stable rather than random so a stale one is
   noticed instead of quietly accumulating.
 - A ConfigMap caps at 1 MiB, roughly 20,000 paths. Split a larger list.
-- Delete the Job and its ConfigMap when finished, so a later `helm upgrade`
-  cannot resurrect a bulk delete from a stale list.
+- Delete the Job and its ConfigMap when finished, **and pass `--reset-values`**:
+
+  ```bash
+  kubectl -n <ns> delete job <rel>-azcopy-move-adhoc-delete
+  kubectl -n <ns> delete configmap azcopy-move-reap
+  helm upgrade --install <rel> . -n <ns> --reset-values
+  ```
+
+  `--reset-values` is load-bearing. `helm upgrade` with no `--set`/`-f`
+  **reuses the previous release's values**, so a plain upgrade after a reap
+  carries `adhocDelete.enabled=true` forward and recreates the delete Job.
+  Verified the hard way: it happened, and only failed to run because the list
+  ConfigMap was already gone and its volume is `optional: false`. Confirm with
+  `helm get values <rel> -n <ns> -a | grep -A3 adhocDelete`.
+
+- This Job carries **no** `ttlSecondsAfterFinished`, unlike the scheduled Jobs.
+  Expiring it on a timer while `adhocDelete.enabled` is still true would let the
+  next `helm upgrade` recreate it and re-run the delete unattended.
+
+## Job retention
+
+Two independent bounds, whichever trips first:
+
+| Setting | Bounds | Applies to |
+|---|---|---|
+| `successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | count | Jobs the CronJob controller owns |
+| `ttlSecondsAfterFinished` | age | any Job carrying it |
+
+The count limits are not a time guarantee. On a `*/5` schedule, keeping 3
+successful Jobs is about fifteen minutes of history. `ttlSecondsAfterFinished`
+(default `86400`) adds a predictable ceiling and catches Jobs the count limits
+do not.
+
+A Job created by hand with `kubectl create job --from=cronjob/...` **does**
+inherit the CronJob's controller owner reference, so it is counted and pruned
+like any scheduled run. Jobs created any other way are not.
+
+**Deleting a Job deletes its pod, and the pod log is the only durable record of
+a run** — `/work` is an `emptyDir` that dies with the pod, taking `copy.log`,
+the azcopy job log and `delete-report.csv` with it. Retention is therefore also
+your investigation window. If you need an audit trail of what was deleted that
+outlives it, ship the pod logs somewhere; do not raise the retention and hope.

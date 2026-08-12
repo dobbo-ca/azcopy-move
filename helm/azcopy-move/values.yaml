@@ -31,8 +31,27 @@ activeDeadlineSeconds: 3600
 # 0 means one attempt per run. The next scheduled run is the retry.
 backoffLimit: 0
 
+# These bound the NUMBER of finished Jobs kept, not their age. On a */5
+# schedule, 3 successful Jobs is about fifteen minutes of history.
 successfulJobsHistoryLimit: 3
 failedJobsHistoryLimit: 5
+
+# Delete a finished Job, and its pod, this many seconds after it ends.
+# Kubernetes' TTL-after-finished controller; GA since 1.23.
+#
+# This is a TIME bound, complementary to the count bounds above -- whichever
+# triggers first wins. It matters because the count limits only cover Jobs the
+# CronJob controller owns. A Job created by hand with
+# `kubectl create job --from=cronjob/...` does inherit that owner reference and
+# is pruned, but anything else is not, and accumulates.
+#
+# NOTE: deleting a Job deletes its pod, and the pod log is the ONLY durable
+# record of a run -- /work is an emptyDir that dies with the pod. So this is
+# also the window in which a run can still be investigated. Ship the logs
+# somewhere if you need an audit trail longer than this.
+#
+# Empty leaves it unset, and only the count limits apply.
+ttlSecondsAfterFinished: 86400
 
 suspend: false
 

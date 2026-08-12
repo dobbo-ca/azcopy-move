@@ -17,6 +17,9 @@ spec:
   suspend: {{ .Values.suspend }}
   jobTemplate:
     spec:
+      {{- with .Values.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
       backoffLimit: {{ .Values.backoffLimit }}
       activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds }}
       template:
