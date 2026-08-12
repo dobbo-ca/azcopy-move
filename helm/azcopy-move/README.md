@@ -336,6 +336,7 @@ NOTES output does this for you.
 | `cleanup.reconcile` | `true` | also deletes any source object already present at the destination with a matching byte count, not only this run's job output; keep this on |
 | `azcopy.concurrencyValue` | `"400"` | bounded by the storage account, not the pod; raise in steps and watch for `503`/`ServerBusy` |
 | `azcopy.logLevel` | `ERROR` | successes are read from the job record, not the log |
+| `azcopy.progressIntervalSeconds` | `30` | seconds between progress lines in the pod log; `0` prints every update |
 | `azcopy.overwrite` | `ifSourceNewer` | |
 | `azcopy.extraArgs` | `[]` | |
 | `sas.existingSecret` | `""` | required when `sas.create` is `false` |
@@ -362,3 +363,36 @@ NOTES output does this for you.
   lower `azcopy.concurrencyValue` if they climb.
 - No local filesystem or PVC endpoints.
 - No workload identity or OIDC.
+
+## Reading the progress output
+
+azcopy redraws a single status line using a carriage return. That is right for a
+terminal and useless under Kubernetes: with no TTY the entire run arrives as one
+unbounded line, so `kubectl logs` shows a wall of text and `kubectl logs -f`
+looks like it has hung.
+
+The chart converts those carriage returns to real newlines before anything else
+sees them, then thins the result. Progress lines are limited to one per
+`azcopy.progressIntervalSeconds`; every other line — the job ID, warnings,
+errors and the final summary — passes through untouched.
+
+```
+--- azcopy copy ---
+INFO: Scanning...
+Job a6654046-f533-bd40-56a9-6f99076f664d has started
+0.1 %, 0 Done, 0 Failed, 845 Pending, 0 Skipped, 845 Total
+12.3 %, 71 Done, 0 Failed, 774 Pending, 0 Skipped, 845 Total
+```
+
+Set `azcopy.progressIntervalSeconds: 0` to print every update. Note that azcopy
+emits one roughly every two seconds, so a long first drain produces thousands of
+lines.
+
+`/work/copy.log` inside the pod always keeps every line regardless of this
+setting. It is what the job ID is parsed from, so thinning the pod log cannot
+affect the delete-verification chain.
+
+**A caveat on `/work`.** It is an `emptyDir`, so `copy.log`, the azcopy job log
+and `delete-report.csv` are destroyed when the pod terminates. The pod log
+survives; the emptyDir does not. If you need the full record, copy it out while
+the pod is still running.

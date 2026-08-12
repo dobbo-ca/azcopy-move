@@ -42,6 +42,20 @@ AZCOPY_LOG_LEVEL="${AZCOPY_LOG_LEVEL:-ERROR}"
 AZCOPY_TRAILING_DOT="${AZCOPY_TRAILING_DOT:-}"
 AZCOPY_EXTRA_ARGS="${AZCOPY_EXTRA_ARGS:-}"
 
+# Seconds between progress lines on stdout. copy.log always keeps every line;
+# this only thins what reaches the pod log. 0 prints every update.
+AZCOPY_PROGRESS_INTERVAL="${AZCOPY_PROGRESS_INTERVAL:-30}"
+
+# progress.awk needs systime(), which gawk and mawk have but BSD awk and
+# busybox awk do not. Calling it where it is missing is fatal, and that would
+# kill the copy pipeline, so probe once and let the filter fall back to
+# counting lines instead.
+if awk 'BEGIN { t = systime(); exit (t > 0 ? 0 : 1) }' >/dev/null 2>&1; then
+  HAVE_SYSTIME=1
+else
+  HAVE_SYSTIME=0
+fi
+
 # SAS only. No workload identity, no OIDC.
 unset AZCOPY_AUTO_LOGIN_TYPE AZCOPY_TENANT_ID 2>/dev/null || true
 
@@ -95,7 +109,7 @@ set -f
     --log-level="$AZCOPY_LOG_LEVEL" \
     $AZCOPY_EXTRA_ARGS 2>&1
   echo $? > "$WORK_DIR/copy.rc"
-} | tee "$COPY_LOG"
+} | tr '\r' '\n' | tee "$COPY_LOG" | awk -v INTERVAL="$AZCOPY_PROGRESS_INTERVAL" -v HAVE_SYSTIME="$HAVE_SYSTIME" -f "$SCRIPT_DIR/progress.awk"
 set +f
 COPY_EXIT="$(cat "$WORK_DIR/copy.rc")"
 set -e
