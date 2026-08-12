@@ -1,0 +1,8 @@
+INFO: Scanning...
+Job a6654046-f533-bd40-56a9-6f99076f664d has started
+Log file is located at: /work/logs/a.log
+0.1 %, 0 Done, 0 Failed, 845 Pending, 0 Skipped, 845 Total
+12.3 %, 71 Done, 0 Failed, 774 Pending, 0 Skipped, 845 Total
+99.9 %, 844 Done, 0 Failed, 1 Pending, 0 Skipped, 845 Total
+WARNING: something odd
+Final Job Status: Completed

@@ -88,6 +88,8 @@ spec:
                   value: {{ .Values.azcopy.overwrite | quote }}
                 - name: AZCOPY_LOG_LEVEL
                   value: {{ .Values.azcopy.logLevel | quote }}
+                - name: AZCOPY_PROGRESS_INTERVAL
+                  value: {{ .Values.azcopy.progressIntervalSeconds | quote }}
                 {{- if or (eq .Values.move.source.type "file") (eq .Values.move.dest.type "file") }}
                 - name: AZCOPY_TRAILING_DOT
                   value: {{ .Values.azcopy.trailingDot | quote }}

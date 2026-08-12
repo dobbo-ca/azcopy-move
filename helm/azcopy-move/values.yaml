@@ -91,6 +91,20 @@ azcopy:
   trailingDot: Enable
   extraArgs: []
 
+  # Seconds between progress lines in the pod log.
+  #
+  # azcopy redraws one status line with a carriage return, which is right for a
+  # terminal and unreadable anywhere else: with no TTY the whole run becomes a
+  # single unbounded line, so `kubectl logs` shows a wall of text and
+  # `kubectl logs -f` looks like it has hung. The scripts convert those returns
+  # to real newlines, which then yields an update roughly every two seconds --
+  # about 2500 lines on an 85 minute run -- so they are thinned to one per
+  # interval here.
+  #
+  # copy.log inside the pod always keeps every line; this only affects stdout.
+  # Set 0 to print every update.
+  progressIntervalSeconds: 30
+
 # ---------------------------------------------------------------------------
 # Credentials
 # ---------------------------------------------------------------------------

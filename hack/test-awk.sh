@@ -134,4 +134,32 @@ run_decide reconcile-stranded 1 1 1 share1 "$DSTEP"
 # reason "job record only".
 run_decide destcheck-0 0 1 0 share1 "$DSTEP"
 
+# --- progress.awk ------------------------------------------------------------
+#
+# The fixture holds a real azcopy stream, carriage returns and all. The caller
+# converts those to newlines before the filter, so the tests do the same.
+
+run_progress() {
+  name="$1"; interval="$2"; have_systime="$3"
+  out="$TMP/progress-$name.txt"
+  tr '\r' '\n' < "$FIX/progress/copy-stream.raw" \
+    | awk -v INTERVAL="$interval" -v HAVE_SYSTIME="$have_systime" \
+          -f "$SCRIPTS/progress.awk" > "$out"
+  check "progress.awk: $name" "$out" "$GOLD/progress-$name.txt"
+}
+
+# 0 disables throttling: every update survives, blank lines from \r\n go.
+run_progress interval-0 0 0
+# Count fallback: first update prints, the rest are dropped at this interval.
+run_progress count-throttled 30 0
+
+# systime() is a gawk/mawk extension. BSD awk (macOS) aborts on it, so only run
+# the time-based case where the local awk actually supports it -- and say so
+# rather than silently reporting a pass that never ran.
+if awk 'BEGIN { t = systime(); exit (t > 0 ? 0 : 1) }' >/dev/null 2>&1; then
+  run_progress time-throttled 999999 1
+else
+  echo "SKIP  progress.awk: time-throttled (this awk has no systime(); the container's gawk does)"
+fi
+
 exit "$FAILED"
