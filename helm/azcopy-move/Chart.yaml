@@ -12,3 +12,12 @@ keywords:
   - azcopy
   - azure-storage
   - migration
+# home and sources are what attach the OCI chart package to this repository, so
+# its package page carries the README instead of being a blank orphan. They are
+# the chart-side equivalent of org.opencontainers.image.source on the image.
+home: https://github.com/dobbo-ca/azcopy-move
+sources:
+  - https://github.com/dobbo-ca/azcopy-move
+maintainers:
+  - name: Chris Dobbyn
+    url: https://github.com/dobbo-ca

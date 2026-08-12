@@ -263,7 +263,7 @@ permission letter you expect, and warns when the expiry is inside 48 hours.
 Install with deletion off:
 
 ```bash
-helm install move oci://ghcr.io/dobbo-ca/azcopy-move/azcopy-move \
+helm install move oci://ghcr.io/dobbo-ca/charts/azcopy-move \
   --version <chart semver> \
   -n azcopy-move --create-namespace \
   -f values.yaml \
@@ -280,7 +280,7 @@ kubectl -n azcopy-move logs -l app.kubernetes.io/instance=move --tail=200
 Only once the reports look right, turn deletion on:
 
 ```bash
-helm upgrade move oci://ghcr.io/dobbo-ca/azcopy-move/azcopy-move \
+helm upgrade move oci://ghcr.io/dobbo-ca/charts/azcopy-move \
   --version <chart semver> \
   -n azcopy-move --reuse-values \
   --set cleanup.enabled=true
@@ -309,7 +309,7 @@ NOTES output does this for you.
 
 | Key | Default | Notes |
 |---|---|---|
-| `image.repository` | `ghcr.io/dobbo-ca/azcopy-move/azcopy` | |
+| `image.repository` | `ghcr.io/dobbo-ca/containers/azcopy-move` | |
 | `image.tag` | `""` | pin an immutable semver or a digest, never `latest` |
 | `image.pullPolicy` | `IfNotPresent` | |
 | `imagePullSecrets` | `[]` | |

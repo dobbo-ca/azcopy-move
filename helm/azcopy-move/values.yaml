@@ -2,7 +2,7 @@
 # Image
 # ---------------------------------------------------------------------------
 image:
-  repository: ghcr.io/dobbo-ca/azcopy-move/azcopy
+  repository: ghcr.io/dobbo-ca/containers/azcopy-move
   # Empty in git. The chart release job writes the image semver in with
   # `yq -i '.image.tag = ...'` immediately before `helm package`, so the
   # packaged chart always pins an immutable tag. Never set this to "latest".
