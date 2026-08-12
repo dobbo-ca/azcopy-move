@@ -48,6 +48,28 @@
           "description": "Files transferred at once. Empty lets azcopy decide. Accepts 8 or \"8\"."
         }
       }
+    },
+    "adhocDelete": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "cleanupEnabled": {
+          "type": "boolean"
+        },
+        "listConfigMap": {
+          "type": "string"
+        },
+        "listKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
     }
   },
   "definitions": {

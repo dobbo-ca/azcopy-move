@@ -134,6 +134,23 @@ run_decide reconcile-stranded 1 1 1 share1 "$DSTEP"
 # reason "job record only".
 run_decide destcheck-0 0 1 0 share1 "$DSTEP"
 
+# --- candidates-file.awk -----------------------------------------------------
+#
+# Feeds the ad-hoc delete. A path mangled here becomes a delete that misses its
+# target, so the awkward CSV cases are the point: a comma inside a quoted path,
+# a doubled quote, a duplicate row, CRLF, and a "keep" row (kept deliberately —
+# verdicts are recomputed against live state, not trusted from the file).
+
+run_candidates_file() {
+  name="$1"; src="$2"
+  out="$TMP/candidates-file-$name.txt"
+  awk -f "$SCRIPTS/candidates-file.awk" "$FIX/candidates-file/$src" > "$out"
+  check "candidates-file.awk: $name" "$out" "$GOLD/candidates-file-$name.txt"
+}
+
+run_candidates_file plain-list plain-list.txt
+run_candidates_file report     report.csv
+
 # --- progress.awk ------------------------------------------------------------
 #
 # The fixture holds a real azcopy stream, carriage returns and all. The caller

@@ -15,7 +15,14 @@
 # but they do appear in the azcopy process argv below, which azcopy gives no
 # way to avoid.
 #
-#   JOB_ID                              required, the azcopy job to read
+#   JOB_ID                              the azcopy job to read; required
+#                                       unless CANDIDATES_FILE is set
+#   CANDIDATES_FILE                     optional: read candidate paths from
+#                                       this file instead of the job plan.
+#                                       Accepts delete-list.txt (one relative
+#                                       path per line) or delete-report.csv.
+#                                       The destination check and the byte
+#                                       comparison still apply to every path.
 #   FROM_TO                             required, e.g. BlobBlob, FileBlob -- used to tell
 #                                        "azcopy rm" the source location explicitly instead
 #                                        of letting it infer from a ".blob"/".file" substring
@@ -43,7 +50,15 @@ SCRIPT_DIR="$(dirname "$0")"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-for v in JOB_ID FROM_TO SOURCE_ENDPOINT SOURCE_CONTAINER DEST_ENDPOINT DEST_CONTAINER SOURCE_SAS_FILE; do
+# JOB_ID names the azcopy job plan to read. It is meaningless when the
+# candidates arrive from a file, and an ad-hoc replay has no job of its own.
+if [ -n "${CANDIDATES_FILE:-}" ]; then
+  REQUIRED="FROM_TO SOURCE_ENDPOINT SOURCE_CONTAINER DEST_ENDPOINT DEST_CONTAINER SOURCE_SAS_FILE"
+else
+  REQUIRED="JOB_ID FROM_TO SOURCE_ENDPOINT SOURCE_CONTAINER DEST_ENDPOINT DEST_CONTAINER SOURCE_SAS_FILE"
+fi
+
+for v in $REQUIRED; do
   eval "val=\${$v:-}"
   [ -n "$val" ] || die "$v is not set"
 done
@@ -110,17 +125,35 @@ COUNTS="$WORK_DIR/counts.txt"
 : > "$DELLIST"
 
 # ---------------------------------------------------------------------------
-# 1. Candidates from the job record.
+# 1. Candidates: from a supplied list, or from the job record.
 # ---------------------------------------------------------------------------
-echo "Reading job $JOB_ID ..."
-"$AZCOPY" jobs show "$JOB_ID" --with-status=Success > "$JOB_RAW" 2>&1 || true
+# CANDIDATES_FILE exists for the ad-hoc case, where the job plan is already gone
+# -- it lives on a per-run emptyDir and dies with the pod. A previous run's
+# delete-list.txt can be replayed instead.
+#
+# A candidate is NOT a decision. Whichever way the list arrives, every path
+# still goes through the destination listing and the byte comparison below
+# before anything is deleted. A stale or wrong list therefore cannot delete a
+# file that is not provably at the destination.
+if [ -n "${CANDIDATES_FILE:-}" ]; then
+  [ -f "$CANDIDATES_FILE" ] || die "no such file: $CANDIDATES_FILE"
+  # Accepts delete-list.txt or delete-report.csv. See candidates-file.awk for
+  # why a CSV's "keep" rows are still taken as candidates.
+  awk -f "$SCRIPT_DIR/candidates-file.awk" "$CANDIDATES_FILE" > "$CAND"
+  NCAND=$(wc -l < "$CAND" | tr -d ' ')
+  echo "Candidates from file   : $NCAND  ($CANDIDATES_FILE)"
+  [ "$NCAND" -gt 0 ] || die "$CANDIDATES_FILE yielded no candidate paths"
+else
+  echo "Reading job $JOB_ID ..."
+  "$AZCOPY" jobs show "$JOB_ID" --with-status=Success > "$JOB_RAW" 2>&1 || true
 
-awk -v SRC_ENDPOINT="$SOURCE_ENDPOINT" -v DST_ENDPOINT="$DEST_ENDPOINT" \
-    -v CONTAINER="$SOURCE_CONTAINER" -v PREFIX="$SOURCE_PREFIX" \
-    -f "$SCRIPT_DIR/candidates.awk" "$JOB_RAW" > "$CAND"
+  awk -v SRC_ENDPOINT="$SOURCE_ENDPOINT" -v DST_ENDPOINT="$DEST_ENDPOINT" \
+      -v CONTAINER="$SOURCE_CONTAINER" -v PREFIX="$SOURCE_PREFIX" \
+      -f "$SCRIPT_DIR/candidates.awk" "$JOB_RAW" > "$CAND"
 
-NCAND=$(wc -l < "$CAND" | tr -d ' ')
-echo "Candidates from azcopy : $NCAND"
+  NCAND=$(wc -l < "$CAND" | tr -d ' ')
+  echo "Candidates from azcopy : $NCAND"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. What is actually on the destination.

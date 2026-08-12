@@ -1,0 +1,3 @@
+a/one.czi
+b/two with space.czi
+three.czi

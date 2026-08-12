@@ -1,0 +1,6 @@
+RelativePath,Verdict,Reason,SourceBytes,DestBytes
+"a/one.czi","delete","verified at destination",100,100
+"odd/name, with comma.czi","delete","verified at destination",5,5
+"quote""inside.czi","delete","verified at destination",7,7
+"kept.czi","keep","MISSING at destination",,
+"a/one.czi","delete","duplicate row",100,100

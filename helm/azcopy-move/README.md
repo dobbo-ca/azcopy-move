@@ -440,3 +440,60 @@ kubectl -n <ns> logs job/<job> | grep -c ServerBusy
 Note that `azcopy.logLevel` defaults to `ERROR`, so the azcopy log file records
 only failed requests. You cannot compute a 503 *rate* from it — successes are
 never written.
+
+## Ad-hoc delete: reaping a copy that ran with cleanup off
+
+If a run copied everything but `cleanup.enabled` was `false`, the objects are at
+the destination and still at the source. The azcopy job plan that recorded the
+transfer lived on the pod's `emptyDir` and died with it, so the schedule cannot
+replay that job — but the run still wrote a **verified** `delete-list.txt`
+before exiting, because the list and the report are produced before the
+cleanup-enabled check.
+
+`adhocDelete` feeds that list back through the same `remove-migrated.sh` the
+schedule uses.
+
+**The list supplies candidates, not decisions.** Every path is re-checked
+against a live destination listing and a byte comparison before anything is
+removed, so a stale or wrong list cannot delete an object that is not provably
+at the destination. That is also why a `delete-report.csv` can be used directly
+even though it contains `keep` rows: verdicts are recomputed against current
+state rather than trusted from a file that may be hours old.
+
+Capture the list before the pod exits — `/work` is an `emptyDir`:
+
+```bash
+kubectl -n <ns> exec <pod> -- cat /work/delete-list.txt > delete-list.txt
+kubectl create configmap azcopy-move-reap -n <ns> \
+  --from-file=delete-list.txt=./delete-list.txt
+```
+
+Then dry-run it, read the output, and only then arm it:
+
+```bash
+helm upgrade --install <rel> . -n <ns> \
+  --set adhocDelete.enabled=true \
+  --set adhocDelete.listConfigMap=azcopy-move-reap \
+  --set adhocDelete.cleanupEnabled=false     # reports, deletes nothing
+
+helm upgrade --install <rel> . -n <ns> \
+  --set adhocDelete.enabled=true \
+  --set adhocDelete.listConfigMap=azcopy-move-reap \
+  --set adhocDelete.cleanupEnabled=true      # deletes
+```
+
+`adhocDelete.cleanupEnabled` is deliberately **separate** from
+`cleanup.enabled`: arming the schedule's deletion must not silently arm a
+one-shot bulk delete, and vice versa.
+
+Notes:
+
+- `RECONCILE` is forced off for this Job. The list is already the reconciled
+  set; running the stranded sweep as well would widen the blast radius beyond
+  what was reviewed.
+- The Job's spec is immutable once created, so changing the list means deleting
+  the Job first. The name is stable rather than random so a stale one is
+  noticed instead of quietly accumulating.
+- A ConfigMap caps at 1 MiB, roughly 20,000 paths. Split a larger list.
+- Delete the Job and its ConfigMap when finished, so a later `helm upgrade`
+  cannot resurrect a bulk delete from a stale list.

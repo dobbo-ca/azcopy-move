@@ -1,0 +1,145 @@
+{{- if .Values.adhocDelete.enabled }}
+{{- include "azcopy-move.validate" . -}}
+{{/*
+One-shot Job that deletes source objects listed in a ConfigMap.
+
+For the case where a copy ran with cleanup disabled: the objects reached the
+destination, but nothing deleted them, and the azcopy job plan that recorded
+the transfer died with the pod's emptyDir. This replays a saved
+delete-list.txt (or delete-report.csv) instead.
+
+It runs the SAME remove-migrated.sh as the CronJob. The list supplies
+CANDIDATES, not decisions -- every path is still checked against a live
+destination listing and a byte comparison before anything is removed. A stale
+or wrong list cannot delete an object that is not provably at the destination.
+
+Deletion is off by default here too: adhocDelete.cleanupEnabled must be true,
+otherwise this reports and runs azcopy rm --dry-run.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "azcopy-move.fullname" . }}-adhoc-delete
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "azcopy-move.labels" . | nindent 4 }}
+    azcopy-move.dobbo.ca/role: adhoc-delete
+  annotations:
+    # Helm owns this Job, so its spec is immutable once created. Changing the
+    # list means deleting the Job and reinstalling; the name is deliberately
+    # stable so a stale one is noticed rather than silently accumulating.
+    "helm.sh/resource-policy": keep
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.adhocDelete.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "azcopy-move.labels" . | nindent 8 }}
+        azcopy-move.dobbo.ca/role: adhoc-delete
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "azcopy-move.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: azcopy
+          image: {{ include "azcopy-move.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh", "/scripts/remove-migrated.sh"]
+          env:
+            - name: CANDIDATES_FILE
+              value: /list/{{ .Values.adhocDelete.listKey }}
+            - name: FROM_TO
+              value: {{ include "azcopy-move.fromTo" . | quote }}
+            - name: SOURCE_ENDPOINT
+              value: {{ include "azcopy-move.endpoint" .Values.move.source | quote }}
+            - name: SOURCE_CONTAINER
+              value: {{ .Values.move.source.container | quote }}
+            - name: SOURCE_PREFIX
+              value: {{ .Values.move.source.prefix | quote }}
+            - name: DEST_ENDPOINT
+              value: {{ include "azcopy-move.endpoint" .Values.move.dest | quote }}
+            - name: DEST_CONTAINER
+              value: {{ .Values.move.dest.container | quote }}
+            - name: DEST_PREFIX
+              value: {{ .Values.move.dest.prefix | quote }}
+            # Independent of cleanup.enabled: turning the schedule's deletion on
+            # must not silently arm a one-shot bulk delete, and vice versa.
+            - name: CLEANUP_ENABLED
+              value: {{ .Values.adhocDelete.cleanupEnabled | quote }}
+            - name: TRUST_JOB_RECORD_ONLY
+              value: "false"
+            # The list already IS the reconciled set. Re-running the stranded
+            # sweep here would widen the blast radius beyond what was reviewed.
+            - name: RECONCILE
+              value: "false"
+            - name: WORK_DIR
+              value: /work
+            - name: SOURCE_SAS_FILE
+              value: /secrets/{{ .Values.sas.sourceKey }}
+            - name: DEST_SAS_FILE
+              value: /secrets/{{ .Values.sas.destKey }}
+            - name: AZCOPY_JOB_PLAN_LOCATION
+              value: /work/plans
+            - name: AZCOPY_LOG_LOCATION
+              value: /work/logs
+            - name: HOME
+              value: /work
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: list
+              mountPath: /list
+              readOnly: true
+            - name: sas
+              mountPath: /secrets
+              readOnly: true
+            - name: work
+              mountPath: /work
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "azcopy-move.fullname" . }}-scripts
+            defaultMode: 0555
+        - name: list
+          configMap:
+            name: {{ required "adhocDelete.listConfigMap is required when adhocDelete.enabled is true" .Values.adhocDelete.listConfigMap }}
+            defaultMode: 0444
+            optional: false
+        - name: sas
+          secret:
+            secretName: {{ include "azcopy-move.secretName" . }}
+            defaultMode: 0400
+            optional: false
+        - name: work
+          emptyDir:
+            sizeLimit: {{ .Values.workDir.sizeLimit }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+{{- end }}
