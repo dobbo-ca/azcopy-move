@@ -70,6 +70,13 @@
           "minimum": 1
         }
       }
+    },
+    "ttlSecondsAfterFinished": {
+      "type": [
+        "integer",
+        "string"
+      ],
+      "description": "Seconds after a Job finishes before Kubernetes deletes it and its pod. Empty string leaves it unset."
     }
   },
   "definitions": {
