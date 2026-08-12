@@ -107,13 +107,40 @@ jobs:
           chart-name: azcopy-move
           version: '0.0.0-pr'
           app-version: ${{ steps.azcopy-version.outputs.version }}
-          oci-path: dobbo-ca/azcopy-move
+          oci-path: dobbo-ca/charts
           values-files: |
             helm/azcopy-move/ci/blob-to-file-values.yaml
             helm/azcopy-move/ci/blob-to-blob-values.yaml
             helm/azcopy-move/ci/file-to-blob-values.yaml
             helm/azcopy-move/ci/file-to-file-values.yaml
           push: 'false'
+
+      # helm lint and helm template both ACCEPT a manifest with junk in front of
+      # apiVersion; only `helm install` rejects it, with the unhelpful "error
+      # validating data: apiVersion not set". A bare `required` in a helper is
+      # all it takes, because required returns the value it checked. Validate
+      # the rendered output offline so that never reaches a cluster again.
+      - name: Rendered manifests are valid Kubernetes objects
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          rc=0
+          for f in helm/azcopy-move/ci/*-values.yaml; do
+            echo "--- $(basename "$f")"
+            helm template t helm/azcopy-move -f "$f" \
+              --set image.tag=0.0.0-pr > "/tmp/$(basename "$f").rendered"
+
+            # Every document must begin with apiVersion, before any schema check.
+            awk '/^---/{d=1;next} d&&NF&&$0!~/^#/{if($0 !~ /^apiVersion:/){
+                   print "  INVALID: document starts with: " $0; bad=1} d=0}
+                 END{exit bad?1:0}' "/tmp/$(basename "$f").rendered" || rc=1
+
+            /tmp/kubeconform -strict -summary -ignore-missing-schemas \
+              "/tmp/$(basename "$f").rendered" || rc=1
+          done
+          exit $rc
 
   container:
     runs-on: ubuntu-latest
