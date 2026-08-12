@@ -25,7 +25,7 @@ Two things get published, independently versioned:
 | Container image | `ghcr.io/dobbo-ca/azcopy-move/azcopy` |
 
 The image also carries a moving alias tag equal to its pinned `azcopy`
-version, e.g. `:10.32.4`. A later image release with the same `azcopy`
+version, e.g. `:10.32.6`. A later image release with the same `azcopy`
 version rebuilds that tag in place. Do not pin to it — pin the image semver.
 
 ## Quick start
@@ -69,7 +69,7 @@ will be published — check the workflow run.
 ## Build the container locally
 
 ```bash
-docker build --platform linux/amd64 -t azcopy-move/azcopy:10.32.4 containers/azcopy
+docker build --platform linux/amd64 -t azcopy-move/azcopy:10.32.6 containers/azcopy
 ```
 
 See `containers/azcopy/CONTAINER.md` for the full requirements and the

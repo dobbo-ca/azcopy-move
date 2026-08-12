@@ -1,8 +1,8 @@
 # azcopy on Azure Linux 3.0. No interpreter beyond the base shell: the scripts
 # are POSIX sh plus awk.
 #
-#   docker build --platform linux/amd64 -t ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.4 .
-#   docker push ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.4
+#   docker build --platform linux/amd64 -t ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 .
+#   docker push ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6
 #
 # Why Azure Linux:
 #   - Microsoft packages azcopy for tdnf, so no tarball and no version drift.
@@ -16,7 +16,7 @@ FROM ${BASE_IMAGE}
 # `tdnf install azcopy` resolves to whatever is newest in the ms-oss repo,
 # which can be a prerelease (verified: azcopy-10.33.0_beta-1 today) — always
 # pin the exact version here.
-ARG AZCOPY_VERSION=10.32.4
+ARG AZCOPY_VERSION=10.32.6
 
 # azcopy       the only tool the scripts call
 # gawk         the parse and decide logic
@@ -38,7 +38,11 @@ RUN set -eux; \
     rm -rf /var/cache/tdnf; \
     command -v azcopy; \
     azcopy --version; \
-    awk --version | head -1
+    awk --version; \
+    case "$(azcopy --version)" in \
+      *"${AZCOPY_VERSION}"*) ;; \
+      *) echo "installed azcopy does not match ARG AZCOPY_VERSION=${AZCOPY_VERSION}" >&2; exit 1 ;; \
+    esac
 
 # Must match podSecurityContext in values.yaml. A Kyverno or Pod Security
 # Admission restricted profile rejects a container that starts as root.
