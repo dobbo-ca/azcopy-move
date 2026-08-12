@@ -1,0 +1,1 @@
+dup.txt	https://dstacct.file.core.windows.net/share1/dup.txt

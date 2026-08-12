@@ -1,0 +1,19 @@
+# helm template matrix: File -> File, two storage accounts, empty source
+# prefix (container root).
+image:
+  tag: "0.0.0-ci"
+
+move:
+  source:
+    type: file
+    storageAccount: acct1
+    container: share1
+    prefix: ""
+  dest:
+    type: file
+    storageAccount: acct2
+    container: share2
+    prefix: incoming
+
+sas:
+  existingSecret: azcopy-move-sas

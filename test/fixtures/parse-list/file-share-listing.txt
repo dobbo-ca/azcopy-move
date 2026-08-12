@@ -1,0 +1,7 @@
+INFO: /; Content Length: 0
+INFO: 2024/; Content Length: 0
+INFO: 2024/report.pdf; Content Length: 1024
+INFO: notes.txt; Content Length: 42
+
+File count: 4
+Total file size: 1066

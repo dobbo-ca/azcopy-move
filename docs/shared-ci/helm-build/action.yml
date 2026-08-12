@@ -1,0 +1,88 @@
+name: helm-build
+description: >
+  Lint, template-check, package and (optionally) push a Helm chart. Generic
+  version of the local enshrouded helm-build action — takes the template
+  check's values files as an input instead of hardcoding one chart's test
+  values.
+inputs:
+  chart-path:
+    description: 'Path to the Helm chart directory.'
+    required: true
+  chart-name:
+    description: 'Helm chart name.'
+    required: true
+  version:
+    description: 'Chart version to pass to helm package --version.'
+    required: true
+  app-version:
+    description: 'appVersion to pass to helm package --app-version. Empty => use Chart.yaml as-is.'
+    default: ''
+  oci-path:
+    description: 'OCI path under registry to push the chart, e.g. dobbo-ca/azcopy-move.'
+    required: true
+  registry:
+    description: 'Container registry URL.'
+    default: 'ghcr.io'
+  values-files:
+    description: 'Newline-separated values files to template-check against. Each is rendered independently.'
+    default: ''
+  push:
+    description: 'true => push the packaged chart to the OCI registry.'
+    default: 'false'
+  github-token:
+    description: 'Token for registry login. Required when push is true.'
+    required: false
+    default: ''
+outputs:
+  chart-package:
+    description: 'The packaged chart filename.'
+    value: ${{ steps.package.outputs.chart-package }}
+runs:
+  using: composite
+  steps:
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: '3.15.0'
+
+    - name: Lint Helm chart
+      shell: bash
+      run: helm lint ${{ inputs.chart-path }}
+
+    - name: Template chart against each values file
+      if: inputs.values-files != ''
+      shell: bash
+      env:
+        VALUES_FILES: ${{ inputs.values-files }}
+      run: |
+        set -euo pipefail
+        while IFS= read -r vf; do
+          [ -n "$vf" ] || continue
+          echo "== helm template -f $vf =="
+          helm template test-release ${{ inputs.chart-path }} -f "$vf" > /dev/null
+        done <<< "$VALUES_FILES"
+
+    - name: Package Helm chart
+      id: package
+      shell: bash
+      run: |
+        set -euo pipefail
+        app_version_flag=()
+        if [ -n "${{ inputs.app-version }}" ]; then
+          app_version_flag=(--app-version "${{ inputs.app-version }}")
+        fi
+        helm package ${{ inputs.chart-path }} --version ${{ inputs.version }} "${app_version_flag[@]}"
+        CHART_PACKAGE="${{ inputs.chart-name }}-${{ inputs.version }}.tgz"
+        echo "chart-package=$CHART_PACKAGE" >> "$GITHUB_OUTPUT"
+
+    - name: Log in to Container Registry
+      if: inputs.push == 'true'
+      shell: bash
+      run: |
+        echo "${{ inputs.github-token }}" | helm registry login ${{ inputs.registry }} -u ${{ github.actor }} --password-stdin
+
+    - name: Push Helm chart to OCI registry
+      if: inputs.push == 'true'
+      shell: bash
+      run: |
+        helm push ${{ steps.package.outputs.chart-package }} oci://${{ inputs.registry }}/${{ inputs.oci-path }}

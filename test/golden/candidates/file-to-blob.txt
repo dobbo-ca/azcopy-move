@@ -1,0 +1,1 @@
+data.csv	https://dstacct.blob.core.windows.net/raw2/data.csv

@@ -1,0 +1,20 @@
+# helm template matrix: File -> Blob, source uses an explicit endpoint
+# override (private endpoint / sovereign cloud), so storageAccount is unset
+# on that side.
+image:
+  tag: "0.0.0-ci"
+
+move:
+  source:
+    type: file
+    endpoint: https://acct1.privatelink.file.core.windows.net
+    container: share1
+    prefix: incoming
+  dest:
+    type: blob
+    storageAccount: acct2
+    container: archive
+    prefix: incoming
+
+sas:
+  existingSecret: azcopy-move-sas

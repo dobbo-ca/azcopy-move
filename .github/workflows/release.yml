@@ -1,0 +1,154 @@
+name: Release
+
+# Two independent version lines, chart/v* and image/v*, each with its own
+# git-cliff config (.cliff-chart.toml / .cliff-image.toml) and its own
+# semver-bump tag-prefix. Each job below guards on the ref so a chart/v* tag
+# never triggers the image job and vice versa — see docs/shared-ci/README.md.
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'chart/v*'
+      - 'image/v*'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'true => compute + build only, no tag push, no publish'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  image-version:
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags/chart/v') }}
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      changed: ${{ steps.bump.outputs.changed }}
+      is_beta: ${{ steps.bump.outputs.is_beta }}
+      is_release: ${{ steps.bump.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve image version
+        id: bump
+        uses: dobbo-ca/.github/actions/semver-bump@v1
+        with:
+          mode: auto
+          config: .cliff-image.toml
+          tag-prefix: image/v
+          include-path: containers/**
+          dry-run: ${{ inputs.dry-run || 'false' }}
+
+  image-release:
+    needs: image-version
+    if: ${{ needs.image-version.outputs.changed == 'true' && !startsWith(github.ref, 'refs/tags/chart/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read AZCOPY_VERSION from Dockerfile
+        id: azcopy-version
+        run: |
+          v="$(grep -m1 '^ARG AZCOPY_VERSION=' containers/azcopy/Dockerfile | cut -d= -f2)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Build and push image
+        uses: dobbo-ca/.github/actions/container-build@v1
+        with:
+          registry: ghcr.io
+          image: dobbo-ca/azcopy-move/azcopy
+          context: containers/azcopy
+          dockerfile: containers/azcopy/Dockerfile
+          platforms: linux/amd64
+          tags: |
+            ${{ needs.image-version.outputs.version }}
+            ${{ steps.azcopy-version.outputs.version }}
+          build-args: |
+            AZCOPY_VERSION=${{ steps.azcopy-version.outputs.version }}
+          push: ${{ inputs.dry-run != true }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  chart-version:
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags/image/v') }}
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      changed: ${{ steps.bump.outputs.changed }}
+      is_beta: ${{ steps.bump.outputs.is_beta }}
+      is_release: ${{ steps.bump.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve chart version
+        id: bump
+        uses: dobbo-ca/.github/actions/semver-bump@v1
+        with:
+          mode: auto
+          config: .cliff-chart.toml
+          tag-prefix: chart/v
+          include-path: helm/**
+          dry-run: ${{ inputs.dry-run || 'false' }}
+
+  chart-release:
+    needs: chart-version
+    if: ${{ needs.chart-version.outputs.changed == 'true' && !startsWith(github.ref, 'refs/tags/image/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --tags --force
+
+      - name: Read AZCOPY_VERSION from Dockerfile
+        id: azcopy-version
+        run: |
+          v="$(grep -m1 '^ARG AZCOPY_VERSION=' containers/azcopy/Dockerfile | cut -d= -f2)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Pin image.tag to the newest published image/v* semver
+        id: pin
+        run: |
+          set -euo pipefail
+          # The grep runs inside its own pipeline segment (braced, with
+          # `|| true`) rather than directly in the command substitution: under
+          # `set -o pipefail` a no-match grep (rc=1) would otherwise abort the
+          # assignment before IMAGE_VERSION is ever set, so the friendly
+          # ::notice/::error below is unreachable.
+          IMAGE_VERSION="$(git tag --list 'image/v*' --sort=-v:refname \
+            | { grep -E '^image/v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+            | head -1 | sed 's|^image/v||')"
+          if [ -z "$IMAGE_VERSION" ]; then
+            # No final image/v* release exists yet (e.g. the very first merge
+            # to main, or every merge before the first image release). Skip
+            # rather than fail so the Release workflow isn't permanently red
+            # while an image line's first release is pending — see
+            # docs/shared-ci/README.md for the ordering.
+            echo "::notice::no published image/v* semver tag found yet — skipping chart publish until an image release exists"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pinning image.tag=$IMAGE_VERSION"
+          yq -i ".image.tag = \"${IMAGE_VERSION}\"" helm/azcopy-move/values.yaml
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Package and push chart
+        if: steps.pin.outputs.skip != 'true'
+        uses: dobbo-ca/.github/actions/helm-build@v1
+        with:
+          chart-path: helm/azcopy-move
+          chart-name: azcopy-move
+          version: ${{ needs.chart-version.outputs.version }}
+          app-version: ${{ steps.azcopy-version.outputs.version }}
+          oci-path: dobbo-ca/azcopy-move
+          registry: ghcr.io
+          push: ${{ inputs.dry-run != true }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

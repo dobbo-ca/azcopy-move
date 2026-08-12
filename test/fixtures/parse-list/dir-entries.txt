@@ -1,0 +1,4 @@
+INFO: /; Content Length: 0
+INFO: archive/; Content Length: 0
+INFO: archive/sub/; Content Length: 0
+INFO: archive/sub/file.bin; Content Length: 7

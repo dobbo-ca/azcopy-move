@@ -1,0 +1,7 @@
+REPORT
+RelativePath,Verdict,Reason,SourceBytes,DestBytes
+"f/file6.txt","delete","job record only",,
+DELLIST
+f/file6.txt
+COUNTS
+1 0 0

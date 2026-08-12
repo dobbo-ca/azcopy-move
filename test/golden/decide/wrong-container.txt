@@ -1,0 +1,6 @@
+REPORT
+RelativePath,Verdict,Reason,SourceBytes,DestBytes
+"d/file4.txt","keep","job wrote elsewhere: https://dstacct.file.core.windows.net/WRONGSHARE/d/file4.txt",,
+DELLIST
+COUNTS
+0 1 0

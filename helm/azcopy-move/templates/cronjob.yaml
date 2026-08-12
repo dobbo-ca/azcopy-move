@@ -1,0 +1,137 @@
+{{- include "azcopy-move.validate" . -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "azcopy-move.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "azcopy-move.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  # Forbid: never two runs at once. Two concurrent runs would copy and delete
+  # the same objects, and one could delete what the other is still writing.
+  concurrencyPolicy: {{ .Values.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  suspend: {{ .Values.suspend }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "azcopy-move.labels" . | nindent 12 }}
+          annotations:
+            # Roll the pods when a script changes.
+            checksum/scripts: {{ include (print $.Template.BasePath "/configmap-scripts.yaml") . | sha256sum }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "azcopy-move.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: azcopy
+              image: {{ include "azcopy-move.image" . | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.containerSecurityContext | nindent 16 }}
+              command: ["/bin/sh", "/scripts/invoke-migration.sh"]
+              env:
+                - name: SOURCE_ENDPOINT
+                  value: {{ include "azcopy-move.endpoint" .Values.move.source | quote }}
+                - name: SOURCE_CONTAINER
+                  value: {{ .Values.move.source.container | quote }}
+                - name: SOURCE_PREFIX
+                  value: {{ .Values.move.source.prefix | quote }}
+                - name: DEST_ENDPOINT
+                  value: {{ include "azcopy-move.endpoint" .Values.move.dest | quote }}
+                - name: DEST_CONTAINER
+                  value: {{ .Values.move.dest.container | quote }}
+                - name: DEST_PREFIX
+                  value: {{ .Values.move.dest.prefix | quote }}
+                - name: FROM_TO
+                  value: {{ include "azcopy-move.fromTo" . | quote }}
+                - name: CLEANUP_ENABLED
+                  value: {{ .Values.cleanup.enabled | quote }}
+                - name: TRUST_JOB_RECORD_ONLY
+                  value: {{ .Values.cleanup.trustJobRecordOnly | quote }}
+                - name: RECONCILE
+                  value: {{ .Values.cleanup.reconcile | quote }}
+                - name: WORK_DIR
+                  value: /work
+                - name: SECRETS_DIR
+                  value: /secrets
+                - name: SOURCE_SAS_FILE
+                  value: /secrets/{{ .Values.sas.sourceKey }}
+                - name: DEST_SAS_FILE
+                  value: /secrets/{{ .Values.sas.destKey }}
+                - name: AZCOPY_OVERWRITE
+                  value: {{ .Values.azcopy.overwrite | quote }}
+                - name: AZCOPY_LOG_LEVEL
+                  value: {{ .Values.azcopy.logLevel | quote }}
+                {{- if or (eq .Values.move.source.type "file") (eq .Values.move.dest.type "file") }}
+                - name: AZCOPY_TRAILING_DOT
+                  value: {{ .Values.azcopy.trailingDot | quote }}
+                {{- end }}
+                {{- with .Values.azcopy.extraArgs }}
+                - name: AZCOPY_EXTRA_ARGS
+                  value: {{ join " " . | quote }}
+                {{- end }}
+                - name: AZCOPY_CONCURRENCY_VALUE
+                  value: {{ .Values.azcopy.concurrencyValue | quote }}
+                # Keep every writable path on the emptyDir, because the root
+                # filesystem is read only.
+                - name: AZCOPY_JOB_PLAN_LOCATION
+                  value: /work/plans
+                - name: AZCOPY_LOG_LOCATION
+                  value: /work/logs
+                - name: HOME
+                  value: /work
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: sas
+                  mountPath: /secrets
+                  readOnly: true
+                - name: work
+                  mountPath: /work
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "azcopy-move.fullname" . }}-scripts
+                defaultMode: 0555
+            - name: sas
+              secret:
+                secretName: {{ include "azcopy-move.secretName" . }}
+                defaultMode: 0400
+                optional: false
+            - name: work
+              emptyDir:
+                sizeLimit: {{ .Values.workDir.sizeLimit }}
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi

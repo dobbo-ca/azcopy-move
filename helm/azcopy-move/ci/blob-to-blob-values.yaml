@@ -1,0 +1,19 @@
+# helm template matrix: Blob -> Blob, same storage account. Asserts
+# AZCOPY_TRAILING_DOT is absent, since neither side is "file".
+image:
+  tag: "0.0.0-ci"
+
+move:
+  source:
+    type: blob
+    storageAccount: acct1
+    container: raw
+    prefix: incoming
+  dest:
+    type: blob
+    storageAccount: acct1
+    container: archive
+    prefix: incoming
+
+sas:
+  existingSecret: azcopy-move-sas

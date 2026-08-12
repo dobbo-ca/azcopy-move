@@ -1,0 +1,14 @@
+apiVersion: v2
+name: azcopy-move
+description: Move a storage prefix between Azure Blob and Azure Files on a schedule, verify what arrived, then delete only the verified source objects.
+type: application
+# Placeholder. CI overwrites this with `helm package --version` from the
+# chart/v* semver-bump tag; nobody edits it by hand.
+version: 0.1.0
+# The azcopy version baked into the image, read from the Dockerfile ARG. This
+# is the conventional meaning of appVersion; it does not name the image.
+appVersion: "10.32.4"
+keywords:
+  - azcopy
+  - azure-storage
+  - migration

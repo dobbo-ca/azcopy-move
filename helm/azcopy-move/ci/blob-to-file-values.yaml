@@ -1,0 +1,19 @@
+# helm template matrix: Blob -> File, two storage accounts, no endpoint
+# overrides. Exercises the storageAccount-derived endpoint path.
+image:
+  tag: "0.0.0-ci"
+
+move:
+  source:
+    type: blob
+    storageAccount: acct1
+    container: raw
+    prefix: incoming
+  dest:
+    type: file
+    storageAccount: acct2
+    container: share1
+    prefix: ""
+
+sas:
+  existingSecret: azcopy-move-sas

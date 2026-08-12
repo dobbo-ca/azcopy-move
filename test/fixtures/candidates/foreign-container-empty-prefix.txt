@@ -1,0 +1,3 @@
+----------- Transfers for JobId aaaa1111-2222-3333-4444-bbbb55556666 -----------
+transfer--> source: https://srcacct.blob.core.windows.net/other/keep.txt destination: https://dstacct.file.core.windows.net/share1/keep.txt status Success
+transfer--> source: https://srcacct.blob.core.windows.net/raw/top-level.txt destination: https://dstacct.file.core.windows.net/share1/top-level.txt status Success

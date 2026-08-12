@@ -1,0 +1,7 @@
+REPORT
+RelativePath,Verdict,Reason,SourceBytes,DestBytes
+"e/file5.txt","delete","verified at destination",500,500
+DELLIST
+e/file5.txt
+COUNTS
+1 0 1

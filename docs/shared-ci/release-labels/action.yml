@@ -1,0 +1,115 @@
+name: release-labels
+description: >
+  Labels a pull request with what merging it will publish, based on which
+  glob(s) its changed files match. Creates any missing label, then applies and
+  removes labels so the result is exact on every run — a re-run after a diff
+  shrinks (e.g. a commit reverted) removes a label that no longer applies.
+inputs:
+  chart-paths:
+    description: 'Newline- or comma-separated glob list matching chart changes, e.g. "helm/**".'
+    required: true
+  image-paths:
+    description: 'Newline- or comma-separated glob list matching image changes, e.g. "containers/**".'
+    required: true
+  chart-label:
+    description: 'Label applied when a changed file matches chart-paths.'
+    default: 'release:chart'
+  image-label:
+    description: 'Label applied when a changed file matches image-paths.'
+    default: 'release:image'
+  none-label:
+    description: 'Label applied when no changed file matches either glob list.'
+    default: 'release:none'
+  github-token:
+    description: 'Token with pull-requests: write on this repo.'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Compute and apply labels
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        CHART_PATHS: ${{ inputs.chart-paths }}
+        IMAGE_PATHS: ${{ inputs.image-paths }}
+        CHART_LABEL: ${{ inputs.chart-label }}
+        IMAGE_LABEL: ${{ inputs.image-label }}
+        NONE_LABEL: ${{ inputs.none-label }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+
+        # Normalize a comma-or-newline-separated glob list into one glob per line.
+        split_globs() {
+          printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$' || true
+        }
+
+        matches_any() {
+          # $1 = file path, rest = globs
+          local f="$1"; shift
+          for g in "$@"; do
+            case "$f" in
+              $g) return 0 ;;
+            esac
+          done
+          return 1
+        }
+
+        mapfile -t chart_globs < <(split_globs "$CHART_PATHS")
+        mapfile -t image_globs < <(split_globs "$IMAGE_PATHS")
+
+        changed_files="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')"
+
+        chart_hit=false
+        image_hit=false
+        while IFS= read -r f; do
+          [ -n "$f" ] || continue
+          if matches_any "$f" "${chart_globs[@]}"; then chart_hit=true; fi
+          if matches_any "$f" "${image_globs[@]}"; then image_hit=true; fi
+        done <<< "$changed_files"
+
+        want=()
+        if [ "$chart_hit" = true ]; then want+=("$CHART_LABEL"); fi
+        if [ "$image_hit" = true ]; then want+=("$IMAGE_LABEL"); fi
+        if [ "$chart_hit" = false ] && [ "$image_hit" = false ]; then want+=("$NONE_LABEL"); fi
+
+        echo "release-labels: chart=$chart_hit image=$image_hit -> ${want[*]}"
+
+        # Ensure every label this action owns exists on the repo before use.
+        for label in "$CHART_LABEL" "$IMAGE_LABEL" "$NONE_LABEL"; do
+          if ! gh api "repos/${REPO}/labels/${label}" >/dev/null 2>&1; then
+            color="ededed"
+            case "$label" in
+              "$CHART_LABEL") color="1d76db" ;;
+              "$IMAGE_LABEL") color="0e8a16" ;;
+              "$NONE_LABEL") color="cccccc" ;;
+            esac
+            gh api "repos/${REPO}/labels" -f name="$label" -f color="$color" >/dev/null
+            echo "created missing label: $label"
+          fi
+        done
+
+        current="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/labels" --jq '.[].name')"
+
+        is_want() {
+          local l="$1"
+          for w in "${want[@]}"; do [ "$w" = "$l" ] && return 0; done
+          return 1
+        }
+
+        # Apply every wanted label that isn't already present.
+        for w in "${want[@]}"; do
+          if ! printf '%s\n' "$current" | grep -qxF "$w"; then
+            gh api "repos/${REPO}/issues/${PR_NUMBER}/labels" -f "labels[]=$w" >/dev/null
+            echo "added label: $w"
+          fi
+        done
+
+        # Remove any of this action's three labels that is present but no longer wanted.
+        for owned in "$CHART_LABEL" "$IMAGE_LABEL" "$NONE_LABEL"; do
+          if printf '%s\n' "$current" | grep -qxF "$owned" && ! is_want "$owned"; then
+            gh api -X DELETE "repos/${REPO}/issues/${PR_NUMBER}/labels/${owned}" >/dev/null
+            echo "removed label: $owned"
+          fi
+        done

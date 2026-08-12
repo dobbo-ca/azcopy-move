@@ -1,0 +1,110 @@
+name: container-build
+description: >
+  Buildx wrapper: login, build, optional push, digest output. Generic across
+  callers — no image-specific assumptions beyond a Dockerfile at the given path.
+inputs:
+  registry:
+    description: 'Container registry host, e.g. ghcr.io.'
+    required: true
+    default: 'ghcr.io'
+  image:
+    description: 'Full image path under the registry, e.g. dobbo-ca/azcopy-move/azcopy.'
+    required: true
+  context:
+    description: 'Build context path.'
+    required: true
+  dockerfile:
+    description: 'Path to the Dockerfile.'
+    required: true
+  platforms:
+    description: 'Comma-separated platform list for buildx.'
+    default: 'linux/amd64'
+  tags:
+    description: 'Newline-separated list of tags (without registry/image prefix), e.g. "10.32.4\nlatest".'
+    required: true
+  build-args:
+    description: 'Newline-separated KEY=VALUE build args.'
+    default: ''
+  push:
+    description: 'true => push to the registry. false => build only, for PR verification.'
+    default: 'false'
+  github-token:
+    description: 'Token for registry login. Required when push is true.'
+    required: false
+    default: ''
+outputs:
+  digest:
+    description: 'Resolved image digest. Empty when push is false.'
+    value: ${{ steps.build.outputs.digest }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to registry
+      if: inputs.push == 'true'
+      shell: bash
+      run: |
+        echo "${{ inputs.github-token }}" | docker login ${{ inputs.registry }} -u ${{ github.actor }} --password-stdin
+
+    - name: Build tag args
+      id: tags
+      shell: bash
+      env:
+        TAGS: ${{ inputs.tags }}
+        REGISTRY: ${{ inputs.registry }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -euo pipefail
+        args=()
+        while IFS= read -r t; do
+          [ -n "$t" ] || continue
+          args+=("-t" "${REGISTRY}/${IMAGE}:${t}")
+        done <<< "$TAGS"
+        {
+          echo "args<<EOF"
+          printf '%s\n' "${args[@]}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Build (and push)
+      id: build
+      shell: bash
+      env:
+        BUILD_ARGS: ${{ inputs.build-args }}
+        TAG_ARGS: ${{ steps.tags.outputs.args }}
+      run: |
+        set -euo pipefail
+        build_arg_flags=()
+        while IFS= read -r kv; do
+          [ -n "$kv" ] || continue
+          build_arg_flags+=("--build-arg" "$kv")
+        done <<< "$BUILD_ARGS"
+
+        tag_flags=()
+        while IFS= read -r t; do
+          [ -n "$t" ] || continue
+          tag_flags+=("$t")
+        done <<< "$TAG_ARGS"
+
+        push_flag=(--load)
+        if [ "${{ inputs.push }}" = "true" ]; then
+          push_flag=(--push)
+        fi
+
+        docker buildx build \
+          --platform "${{ inputs.platforms }}" \
+          -f "${{ inputs.dockerfile }}" \
+          "${build_arg_flags[@]}" \
+          "${tag_flags[@]}" \
+          "${push_flag[@]}" \
+          "${{ inputs.context }}"
+
+        if [ "${{ inputs.push }}" = "true" ]; then
+          first_tag="${{ inputs.registry }}/${{ inputs.image }}:$(echo "${{ inputs.tags }}" | head -n1)"
+          digest="$(docker buildx imagetools inspect "$first_tag" --format '{{json .Manifest}}' | grep -o '"digest":"[^"]*"' | head -n1 | cut -d'"' -f4)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        else
+          echo "digest=" >> "$GITHUB_OUTPUT"
+        fi

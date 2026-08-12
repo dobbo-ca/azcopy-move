@@ -1,0 +1,155 @@
+# ---------------------------------------------------------------------------
+# Image
+# ---------------------------------------------------------------------------
+image:
+  repository: ghcr.io/dobbo-ca/azcopy-move/azcopy
+  # Empty in git. The chart release job writes the image semver in with
+  # `yq -i '.image.tag = ...'` immediately before `helm package`, so the
+  # packaged chart always pins an immutable tag. Never set this to "latest".
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+  # - name: secret-registry
+
+# ---------------------------------------------------------------------------
+# Schedule
+# ---------------------------------------------------------------------------
+schedule: "*/5 * * * *"
+
+# Forbid means a run is skipped while the previous one is still going, so two
+# copies never touch the same files. Do not change this to Allow.
+concurrencyPolicy: Forbid
+
+# A run that has not started within this many seconds is counted as missed.
+startingDeadlineSeconds: 120
+
+# Hard ceiling on one run. With Forbid, a run that hangs blocks every later
+# one, so this is what breaks the deadlock.
+activeDeadlineSeconds: 3600
+
+# 0 means one attempt per run. The next scheduled run is the retry.
+backoffLimit: 0
+
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 5
+
+suspend: false
+
+# ---------------------------------------------------------------------------
+# What to move
+# ---------------------------------------------------------------------------
+# Source and destination are independent, so Blob->File, Blob->Blob, File->Blob
+# and File->File all work, across two different storage accounts.
+move:
+  source:
+    type: blob            # blob | file
+    storageAccount: ""    # ignored when endpoint is set
+    endpoint: ""           # full scheme+host override, no path, e.g.
+                            # https://acct.privatelink.blob.core.windows.net
+    container: ""          # container name (blob) or share name (file)
+    prefix: ""             # empty means the container root
+  dest:
+    type: file
+    storageAccount: ""
+    endpoint: ""
+    container: ""
+    prefix: ""
+
+# ---------------------------------------------------------------------------
+# Deletion
+# ---------------------------------------------------------------------------
+cleanup:
+  # SAFE DEFAULT. false runs the copy and writes the delete report, but
+  # deletes nothing. Watch a few cycles, read the reports, then set true.
+  enabled: false
+
+  # false requires the destination SAS and checks every file is at the
+  # destination with a matching byte count before deleting it. Setting true
+  # deletes on the azcopy job record alone.
+  trustJobRecordOnly: false
+
+  # Also delete any source file already at the destination with a matching
+  # byte count, not only the ones this run's job reports.
+  #
+  # KEEP THIS ON. A file copied in one run but held back by a transient verify
+  # failure never appears in a later job record, because the later copy skips
+  # it as already present. Without reconcile it stays at the source forever.
+  # It compares two listings already in memory, so it costs no API calls.
+  reconcile: true
+
+# ---------------------------------------------------------------------------
+# azcopy tuning
+# ---------------------------------------------------------------------------
+azcopy:
+  # Server-to-server copy, so this is bounded by the storage account, not the
+  # pod. The account is shared with live traffic. Raise in steps and watch for
+  # 503 ServerBusy.
+  concurrencyValue: "400"
+  logLevel: ERROR
+  overwrite: ifSourceNewer
+  trailingDot: Enable
+  extraArgs: []
+
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+# Authorization is by SAS only. No workload identity, no OIDC.
+#
+# Strongly preferred: create the Secret out of band so no SAS ever reaches
+# git or a Helm release. Both keys are required unless
+# cleanup.trustJobRecordOnly is true.
+#
+#   kubectl create secret generic azcopy-move-sas -n azcopy-move \
+#     --from-literal=source-sas='sv=...' \
+#     --from-literal=dest-sas='sv=...'
+#
+sas:
+  existingSecret: azcopy-move-sas
+  sourceKey: source-sas
+  destKey: dest-sas
+
+  # Only for a throwaway test. Setting these writes the SAS into the release.
+  create: false
+  sourceSas: ""
+  destSas: ""
+
+# ---------------------------------------------------------------------------
+# Pod
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+
+# Satisfies the Kyverno restricted profile. Change nothing here without
+# checking the cluster policies first.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# Scratch space for job plan files, logs and the delete list. One emptyDir per
+# run, so each run only ever sees its own azcopy job.
+workDir:
+  sizeLimit: 2Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

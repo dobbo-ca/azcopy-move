@@ -1,0 +1,6 @@
+REPORT
+RelativePath,Verdict,Reason,SourceBytes,DestBytes
+"wrong.txt","keep","job wrote elsewhere: https://acct1.blob.core.windows.net/SOMEOTHERCONTAINER/archive/wrong.txt",,
+DELLIST
+COUNTS
+0 1 0

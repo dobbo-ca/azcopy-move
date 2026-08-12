@@ -1,0 +1,6 @@
+----------- Transfers for JobId 99998888-7777-6666-5555-444433332222 -----------
+transfer--> source: https://acct1.blob.core.windows.net/raw/incoming/report.pdf destination: https://acct1.blob.core.windows.net/archive/incoming/report.pdf status Success
+transfer--> source: https://acct1.blob.core.windows.net/raw/incoming/notes.txt destination: https://acct1.blob.core.windows.net/archive/incoming/notes.txt status Success
+
+Job 99998888-7777-6666-5555-444433332222 summary
+Complete Job Ordered: 2

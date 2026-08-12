@@ -1,0 +1,5 @@
+----------- Transfers for JobId 22223333-4444-5555-6666-777788889999 -----------
+transfer--> source: https://srcacct.file.core.windows.net/share2/exports/data.csv destination: https://dstacct.blob.core.windows.net/raw2/data.csv status Success
+
+Job 22223333-4444-5555-6666-777788889999 summary
+Complete Job Ordered: 1

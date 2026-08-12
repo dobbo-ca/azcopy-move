@@ -1,0 +1,36 @@
+# git-cliff config for the chart/v* version line. See docs/shared-ci/README.md
+# and the git-cliff-two-lines verified-assumption notes for why include_paths
+# is plural, why tag_pattern must be anchored, and why the release commit for
+# this line must touch a path under helm/**.
+#
+# NOTE: [changelog] below (header/body/commit_parsers) is only ever consumed
+# via `--bumped-version`, which ignores it entirely — release.yml has no step
+# that renders a changelog or creates a GitHub Release from this config. It's
+# kept ready for whenever that's added; until then this repo publishes no
+# release notes, by omission rather than by intent to skip them.
+[changelog]
+header = "# Chart Changelog\n\n"
+body = """
+## {{ version }} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for c in commits %}- {{ c.message | upper_first }}
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+tag_pattern = '^chart/v[0-9]+\.[0-9]+\.[0-9]+$'
+include_paths = ["helm/**"]
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^(docs|test|ci|chore|refactor|style|perf)", group = "Other" },
+]
+
+[bump]
+initial_tag = "chart/v0.1.0"

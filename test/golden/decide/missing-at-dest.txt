@@ -1,0 +1,6 @@
+REPORT
+RelativePath,Verdict,Reason,SourceBytes,DestBytes
+"b/file2.txt","keep","MISSING at destination",,
+DELLIST
+COUNTS
+0 1 0

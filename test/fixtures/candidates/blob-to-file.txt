@@ -1,0 +1,7 @@
+----------- Transfers for JobId 11112222-3333-4444-5555-666677778888 -----------
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/2024/ destination: https://dstacct.file.core.windows.net/share1/2024/ status Success
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/2024/report.pdf destination: https://dstacct.file.core.windows.net/share1/2024/report.pdf status Success
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/notes.txt destination: https://dstacct.file.core.windows.net/share1/notes.txt status Success
+
+Job 11112222-3333-4444-5555-666677778888 summary
+Complete Job Ordered: 3

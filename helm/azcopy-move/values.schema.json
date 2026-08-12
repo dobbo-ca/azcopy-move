@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "move": {
+      "type": "object",
+      "required": ["source", "dest"],
+      "properties": {
+        "source": { "$ref": "#/definitions/side" },
+        "dest": { "$ref": "#/definitions/side" }
+      }
+    },
+    "azcopy": {
+      "type": "object",
+      "properties": {
+        "trailingDot": {
+          "type": "string",
+          "enum": ["Enable", "Disable", "AllowToUnsafeDestination"]
+        }
+      }
+    }
+  },
+  "definitions": {
+    "side": {
+      "type": "object",
+      "required": ["type", "container"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["blob", "file"]
+        },
+        "storageAccount": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Empty, or a scheme+host only, e.g. https://acct.privatelink.blob.core.windows.net. No path component.",
+          "pattern": "^(https?://[^/]+)?$"
+        },
+        "container": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string",
+          "pattern": "^$|^[^/].*[^/]$|^[^/]$"
+        }
+      }
+    }
+  }
+}

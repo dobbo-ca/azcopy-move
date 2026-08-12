@@ -1,0 +1,13 @@
+# Helm chart packaging artifacts
+*.tgz
+charts/
+
+# macOS
+.DS_Store
+
+# graphify code-knowledge-graph cache
+graphify-out/
+
+# minted SAS tokens / local deploy config — never commit these
+*.sas
+deploy.env

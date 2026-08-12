@@ -1,0 +1,37 @@
+azcopy-move {{ .Chart.Version }} installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+  schedule   : {{ .Values.schedule }}
+  from-to    : {{ include "azcopy-move.fromTo" . }}
+  source     : {{ include "azcopy-move.endpoint" .Values.move.source }}/{{ .Values.move.source.container }}/{{ .Values.move.source.prefix }}
+  dest       : {{ include "azcopy-move.endpoint" .Values.move.dest }}/{{ .Values.move.dest.container }}/{{ .Values.move.dest.prefix }}
+  overlap    : {{ .Values.concurrencyPolicy }}
+
+{{ if not .Values.cleanup.enabled }}
+DELETION IS OFF. Each run copies and writes a delete report, but removes
+nothing from the source. Watch several cycles, read the reports, then set
+cleanup.enabled=true.
+{{- else }}
+*** DELETION IS ON. Every run removes verified objects from
+*** {{ include "azcopy-move.endpoint" .Values.move.source }}/{{ .Values.move.source.container }}/{{ .Values.move.source.prefix }}
+{{- if .Values.cleanup.trustJobRecordOnly }}
+*** trustJobRecordOnly is true, so the destination is NOT checked before deleting.
+{{- end }}
+{{- end }}
+
+Watch it:
+
+  kubectl -n {{ .Release.Namespace }} get cronjob,job,pod
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/instance={{ .Release.Name }} --tail=200
+
+Run one cycle now, without waiting for the schedule. A manually-created Job is
+NOT counted by concurrencyPolicy: Forbid, so suspend the CronJob first or a
+scheduled tick can start at the same time and race this run:
+
+  kubectl -n {{ .Release.Namespace }} patch cronjob {{ include "azcopy-move.fullname" . }} -p '{"spec":{"suspend":true}}'
+  kubectl -n {{ .Release.Namespace }} create job --from=cronjob/{{ include "azcopy-move.fullname" . }} manual-1
+  # ... wait for it to finish, then:
+  kubectl -n {{ .Release.Namespace }} patch cronjob {{ include "azcopy-move.fullname" . }} -p '{"spec":{"suspend":false}}'
+
+Stop it:
+
+  kubectl -n {{ .Release.Namespace }} patch cronjob {{ include "azcopy-move.fullname" . }} -p '{"spec":{"suspend":true}}'

@@ -1,0 +1,3 @@
+----------- Transfers for JobId 66667777-8888-9999-0000-111122223333 -----------
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/dup.txt destination: https://dstacct.file.core.windows.net/share1/dup.txt status Success
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/dup.txt destination: https://dstacct.file.core.windows.net/share1/dup.txt status Success

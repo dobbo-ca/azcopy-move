@@ -1,0 +1,2 @@
+----------- Transfers for JobId 33334444-5555-6666-7777-888899990000 -----------
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/caf%C3%A9%20menu.pdf destination: https://dstacct.file.core.windows.net/share1/caf%C3%A9%20menu.pdf status Success

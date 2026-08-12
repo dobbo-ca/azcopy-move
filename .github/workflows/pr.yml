@@ -1,0 +1,173 @@
+name: PR
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_LOCAL_TAG: azcopy-move-pr-check:local
+
+jobs:
+  release-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Apply release labels
+        uses: dobbo-ca/.github/actions/release-labels@v1
+        with:
+          chart-paths: 'helm/**'
+          image-paths: 'containers/**'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  forbidden-strings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Grep for source-material customer identifiers
+        env:
+          # Real identifiers (customer names, storage account names, etc.)
+          # live in a repo/org Actions variable, never in this file — a
+          # pattern list committed here would itself be the leak it's meant
+          # to catch. Newline-separated regexes. Unset/empty = scan skipped.
+          FORBIDDEN_PATTERNS: ${{ vars.FORBIDDEN_PATTERNS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FORBIDDEN_PATTERNS:-}" ]; then
+            echo "::warning::FORBIDDEN_PATTERNS repo/org variable is unset — skipping identifier scan"
+            exit 0
+          fi
+          found=0
+          while IFS= read -r p; do
+            [ -n "$p" ] || continue
+            # Exclude .git (VCS internals) and .github (this workflow, which
+            # necessarily references the check's own machinery) from the scan.
+            if grep -RIl --exclude-dir=.git --exclude-dir=.github -E "$p" . ; then
+              echo "::error::forbidden identifier matched pattern: $p"
+              found=1
+            fi
+          done <<< "$FORBIDDEN_PATTERNS"
+          if [ "$found" != 0 ]; then
+            exit 1
+          fi
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(helm/azcopy-move/scripts/*.sh hack/*.sh)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no shell scripts found yet"
+            exit 0
+          fi
+          shellcheck "${files[@]}"
+
+  hadolint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3
+        with:
+          dockerfile: containers/azcopy/Dockerfile
+          # Default threshold (info) fails on DL3006/DL4006 style warnings;
+          # this repo's Dockerfile is out of the ci area's ownership, so gate
+          # on error here rather than edit it. Prefer fixing DL3006/DL4006 in
+          # the Dockerfile itself and dropping this override, if that's ever
+          # in scope.
+          failure-threshold: error
+
+  awk-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: awk golden tests
+        run: sh hack/test-awk.sh
+
+  helm-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read AZCOPY_VERSION from Dockerfile
+        id: azcopy-version
+        run: |
+          v="$(grep -m1 '^ARG AZCOPY_VERSION=' containers/azcopy/Dockerfile | cut -d= -f2)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Lint and template chart against all four move directions
+        uses: dobbo-ca/.github/actions/helm-build@v1
+        with:
+          chart-path: helm/azcopy-move
+          chart-name: azcopy-move
+          version: '0.0.0-pr'
+          app-version: ${{ steps.azcopy-version.outputs.version }}
+          oci-path: dobbo-ca/azcopy-move
+          values-files: |
+            helm/azcopy-move/ci/blob-to-file-values.yaml
+            helm/azcopy-move/ci/blob-to-blob-values.yaml
+            helm/azcopy-move/ci/file-to-blob-values.yaml
+            helm/azcopy-move/ci/file-to-file-values.yaml
+          push: 'false'
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read AZCOPY_VERSION from Dockerfile
+        id: azcopy-version
+        run: |
+          v="$(grep -m1 '^ARG AZCOPY_VERSION=' containers/azcopy/Dockerfile | cut -d= -f2)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Build image (no push)
+        uses: dobbo-ca/.github/actions/container-build@v1
+        with:
+          registry: ghcr.io
+          image: dobbo-ca/azcopy-move/azcopy
+          context: containers/azcopy
+          dockerfile: containers/azcopy/Dockerfile
+          platforms: linux/amd64
+          tags: ${{ steps.azcopy-version.outputs.version }}
+          build-args: |
+            AZCOPY_VERSION=${{ steps.azcopy-version.outputs.version }}
+          push: 'false'
+      - name: Tag the loaded image for local verification
+        run: |
+          docker tag "ghcr.io/dobbo-ca/azcopy-move/azcopy:${{ steps.azcopy-version.outputs.version }}" "$IMAGE_LOCAL_TAG"
+      - name: CONTAINER.md verification — azcopy --version
+        run: docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c 'azcopy --version'
+      - name: CONTAINER.md verification — awk --version
+        run: docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c 'awk --version | head -1'
+      - name: CONTAINER.md verification — id
+        run: |
+          out="$(docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c 'id')"
+          echo "$out"
+          echo "$out" | grep -q 'uid=1000'
+          echo "$out" | grep -q 'gid=1000'
+      - name: CONTAINER.md verification — required coreutils present
+        run: |
+          docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c \
+            'for c in sed grep sort wc tr head tee date mkdir dirname; do command -v $c || { echo MISSING $c; exit 1; }; done'
+      - name: CONTAINER.md verification — writable emptyDir mounts under read-only root
+        run: |
+          # A bare "--tmpfs /work" mounts root-owned, so uid 1000 cannot write and
+          # the check fails for a reason the cluster does not have. Kubernetes hands
+          # the emptyDir to the pod's fsGroup; match that here.
+          docker run --rm --user 1000:1000 --read-only \
+            --tmpfs /work:uid=1000,gid=1000 --tmpfs /tmp:uid=1000,gid=1000 \
+            "$IMAGE_LOCAL_TAG" -c 'touch /work/x && echo writable-ok'
+      - name: azcopy copy --help exposes --from-to and --trailing-dot
+        run: |
+          help="$(docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c 'azcopy copy --help')"
+          echo "$help" | grep -q -- '--from-to'
+          echo "$help" | grep -q -- '--trailing-dot'
+      - name: Pinned azcopy version matches the Dockerfile ARG
+        run: |
+          reported="$(docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c 'azcopy --version')"
+          echo "$reported" | grep -q "${{ steps.azcopy-version.outputs.version }}"

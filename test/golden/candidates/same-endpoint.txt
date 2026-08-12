@@ -1,0 +1,2 @@
+report.pdf	https://acct1.blob.core.windows.net/archive/incoming/report.pdf
+notes.txt	https://acct1.blob.core.windows.net/archive/incoming/notes.txt

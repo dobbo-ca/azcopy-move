@@ -1,0 +1,3 @@
+----------- Transfers for JobId 77778888-9999-0000-1111-222233334444 -----------
+transfer--> source: https://my-acct.blob.core.windows.net/raw/imports/real.txt destination: https://dstacct.file.core.windows.net/share1/real.txt status Success
+transfer--> source: https://my-acctXblob.core.windows.net/raw/imports/decoy.txt destination: https://dstacct.file.core.windows.net/share1/decoy.txt status Success

@@ -1,0 +1,3 @@
+----------- Transfers for JobId 55556666-7777-8888-9999-000011112222 -----------
+transfer--> source: https://srcacct.blob.core.windows.net/raw/imports/keep.txt destination: https://dstacct.file.core.windows.net/share1/keep.txt status Success
+transfer--> source: https://srcacct.blob.core.windows.net/raw/other/discard.txt destination: https://dstacct.file.core.windows.net/share1/other/discard.txt status Success

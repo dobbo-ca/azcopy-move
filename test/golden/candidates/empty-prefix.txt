@@ -1,0 +1,2 @@
+top-level.txt	https://dstacct.file.core.windows.net/share1/top-level.txt
+2024/nested/report.pdf	https://dstacct.file.core.windows.net/share1/2024/nested/report.pdf
