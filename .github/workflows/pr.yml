@@ -75,15 +75,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: hadolint
-        uses: hadolint/hadolint-action@v3
+        # hadolint/hadolint-action publishes no moving major tag; v3 does not
+        # resolve. Pin an exact release.
+        uses: hadolint/hadolint-action@v3.4.0
         with:
           dockerfile: containers/azcopy/Dockerfile
-          # Default threshold (info) fails on DL3006/DL4006 style warnings;
-          # this repo's Dockerfile is out of the ci area's ownership, so gate
-          # on error here rather than edit it. Prefer fixing DL3006/DL4006 in
-          # the Dockerfile itself and dropping this override, if that's ever
-          # in scope.
-          failure-threshold: error
+          # No failure-threshold override. The Dockerfile is clean at hadolint's
+          # default (info): DL3006 is satisfied by the tagged ARG BASE_IMAGE, and
+          # DL4006 by the pipe-free version assertion in the install RUN.
 
   awk-tests:
     runs-on: ubuntu-latest
