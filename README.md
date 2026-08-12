@@ -32,7 +32,7 @@ version rebuilds that tag in place. Do not pin to it — pin the image semver.
 
 ```bash
 helm install move oci://ghcr.io/dobbo-ca/azcopy-move/azcopy-move \
-  --version <chart semver> \
+  --version 0.1.0 \
   -n azcopy-move --create-namespace \
   -f values.yaml
 ```
