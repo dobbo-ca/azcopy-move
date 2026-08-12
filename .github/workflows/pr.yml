@@ -128,7 +128,7 @@ jobs:
         uses: dobbo-ca/.github/actions/container-build@v1
         with:
           registry: ghcr.io
-          image: dobbo-ca/azcopy-move/azcopy
+          image: dobbo-ca/containers/azcopy-move
           context: containers/azcopy
           dockerfile: containers/azcopy/Dockerfile
           platforms: linux/amd64
@@ -138,7 +138,7 @@ jobs:
           push: 'false'
       - name: Tag the loaded image for local verification
         run: |
-          docker tag "ghcr.io/dobbo-ca/azcopy-move/azcopy:${{ steps.azcopy-version.outputs.version }}" "$IMAGE_LOCAL_TAG"
+          docker tag "ghcr.io/dobbo-ca/containers/azcopy-move:${{ steps.azcopy-version.outputs.version }}" "$IMAGE_LOCAL_TAG"
       - name: CONTAINER.md verification — azcopy --version
         run: docker run --rm --user 1000:1000 "$IMAGE_LOCAL_TAG" -c 'azcopy --version'
       - name: CONTAINER.md verification — awk --version

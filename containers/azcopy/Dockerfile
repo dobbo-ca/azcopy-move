@@ -1,8 +1,8 @@
 # azcopy on Azure Linux 3.0. No interpreter beyond the base shell: the scripts
 # are POSIX sh plus awk.
 #
-#   docker build --platform linux/amd64 -t ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 .
-#   docker push ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6
+#   docker build --platform linux/amd64 -t ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 .
+#   docker push ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6
 #
 # Why Azure Linux:
 #   - Microsoft packages azcopy for tdnf, so no tarball and no version drift.
@@ -11,12 +11,32 @@
 ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0
 FROM ${BASE_IMAGE}
 
+# An ARG declared before FROM leaves scope at the FROM. Redeclare it, or the
+# base.name label below silently renders empty.
+ARG BASE_IMAGE
+
+# org.opencontainers.image.source is what makes GitHub attach this package to
+# the repository, which is in turn what puts the README on the package page and
+# gives it the repo's licence and visibility. Without it the package is an
+# orphan with a blank page. The rest are conventional OCI metadata.
+LABEL org.opencontainers.image.source="https://github.com/dobbo-ca/azcopy-move" \
+      org.opencontainers.image.url="https://github.com/dobbo-ca/azcopy-move" \
+      org.opencontainers.image.documentation="https://github.com/dobbo-ca/azcopy-move/blob/main/containers/azcopy/CONTAINER.md" \
+      org.opencontainers.image.title="azcopy-move" \
+      org.opencontainers.image.description="azcopy and a POSIX userland, nothing else. Runs the azcopy-move copy/verify/delete scripts as a Kubernetes CronJob." \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.base.name="${BASE_IMAGE}"
+
 # Single source of truth for the azcopy version. CI reads this ARG for the
 # chart's appVersion and for the image's azcopy alias tag. An unpinned
 # `tdnf install azcopy` resolves to whatever is newest in the ms-oss repo,
 # which can be a prerelease (verified: azcopy-10.33.0_beta-1 today) — always
 # pin the exact version here.
 ARG AZCOPY_VERSION=10.32.6
+
+# Declared after the ARG so it can reference it. This names the version of the
+# software IN the image, which is azcopy — not the image's own semver.
+LABEL org.opencontainers.image.version="${AZCOPY_VERSION}"
 
 # azcopy       the only tool the scripts call
 # gawk         the parse and decide logic

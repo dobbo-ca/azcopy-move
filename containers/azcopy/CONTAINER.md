@@ -78,23 +78,23 @@ The chart supplies all of this; the image must not fight it.
 ## Build and verify
 
 ```bash
-docker build --platform linux/amd64 -t ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 .
+docker build --platform linux/amd64 -t ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 .
 
 # All seven must succeed.
-docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c 'azcopy --version'
-docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c 'awk --version | head -1'
-docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c 'id'
-docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c \
+docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c 'azcopy --version'
+docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c 'awk --version | head -1'
+docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c 'id'
+docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c \
   'for c in sed grep sort wc tr head tee date mkdir dirname; do command -v $c || { echo MISSING $c; exit 1; }; done'
 # A bare "--tmpfs /work" mounts root-owned and uid 1000 cannot write to it, which
 # reports a failure the cluster would not have. Kubernetes gives the emptyDir to
 # the pod's fsGroup, so give the tmpfs the same owner to match.
 docker run --rm --user 1000:1000 --read-only \
   --tmpfs /work:uid=1000,gid=1000 --tmpfs /tmp:uid=1000,gid=1000 \
-  ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c 'touch /work/x && echo writable-ok'
-docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c \
+  ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c 'touch /work/x && echo writable-ok'
+docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c \
   'azcopy copy --help' # must expose --from-to and --trailing-dot
-docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/azcopy-move/azcopy:10.32.6 -c \
+docker run --rm --user 1000:1000 ghcr.io/dobbo-ca/containers/azcopy-move:10.32.6 -c \
   'azcopy --version' # reported version must match the Dockerfile's ARG AZCOPY_VERSION pin
 ```
 

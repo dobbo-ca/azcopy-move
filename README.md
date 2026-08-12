@@ -21,8 +21,8 @@ Two things get published, independently versioned:
 
 | Artifact | Path |
 |---|---|
-| Helm chart | `ghcr.io/dobbo-ca/azcopy-move/azcopy-move` |
-| Container image | `ghcr.io/dobbo-ca/azcopy-move/azcopy` |
+| Helm chart | `ghcr.io/dobbo-ca/charts/azcopy-move` |
+| Container image | `ghcr.io/dobbo-ca/containers/azcopy-move` |
 
 The image also carries a moving alias tag equal to its pinned `azcopy`
 version, e.g. `:10.32.6`. A later image release with the same `azcopy`
@@ -31,7 +31,7 @@ version rebuilds that tag in place. Do not pin to it — pin the image semver.
 ## Quick start
 
 ```bash
-helm install move oci://ghcr.io/dobbo-ca/azcopy-move/azcopy-move \
+helm install move oci://ghcr.io/dobbo-ca/charts/azcopy-move \
   --version 0.1.0 \
   -n azcopy-move --create-namespace \
   -f values.yaml
@@ -69,7 +69,7 @@ will be published — check the workflow run.
 ## Build the container locally
 
 ```bash
-docker build --platform linux/amd64 -t azcopy-move/azcopy:10.32.6 containers/azcopy
+docker build --platform linux/amd64 -t azcopy-move-local:10.32.6 containers/azcopy
 ```
 
 See `containers/azcopy/CONTAINER.md` for the full requirements and the

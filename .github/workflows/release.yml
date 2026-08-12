@@ -63,7 +63,7 @@ jobs:
         uses: dobbo-ca/.github/actions/container-build@v1
         with:
           registry: ghcr.io
-          image: dobbo-ca/azcopy-move/azcopy
+          image: dobbo-ca/containers/azcopy-move
           context: containers/azcopy
           dockerfile: containers/azcopy/Dockerfile
           platforms: linux/amd64
@@ -148,7 +148,7 @@ jobs:
           chart-name: azcopy-move
           version: ${{ needs.chart-version.outputs.version }}
           app-version: ${{ steps.azcopy-version.outputs.version }}
-          oci-path: dobbo-ca/azcopy-move
+          oci-path: dobbo-ca/charts
           registry: ghcr.io
           push: ${{ inputs.dry-run != true }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
